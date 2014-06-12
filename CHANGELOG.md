@@ -3,9 +3,409 @@
 For instructions on upgrading to newer versions, visit
 [mongoid.org](http://mongoid.org/en/mongoid/docs/upgrading.html).
 
-## 3.1.0 (branch: master)
+## 4.0.0
+
+### Major Changes (Backwards Incompatible)
+
+* Mongoid now requires Active Model 4 or higher.
+
+* `Document#set` now accepts multiple attributes in the form of a hash,
+  instead of the previous `(field, value)` args. Field aliases and typecasting
+  are also now supported in this operation.
+
+        document.set(name: "Photek", likes: 10000)
+
+* `Document#rename` now accepts multiple attributes in the form of a hash,
+  instead of the previous `(field, value)` args. Field aliases are supported.
+
+        document.rename(first_name: "fn", last_name: "ln")
+
+* `Document#inc` now accepts multiple attributes in the form of a hash, instead
+  of previously only being able to increment one value at a time. Aliases and
+  serialization is supported.
+
+        document.inc(score: 10, place: -1, lives: -10)
+
+* `Document#pop` now accepts multiple attributes in the form of a hash, instead
+  of previously only being able to pop one value at a time. Aliases and
+  serialization is supported.
+
+        document.pop(names: 1, aliases: -1)
+
+* `Document#bit` now accepts multiple attributes in the form of a hash, instead
+  of previously only being able to apply one set of operations at a time.
+  Aliases and serialization are supported.
+
+        document.bit(age: { and: 13 }, score: { or: 13 })
+
+* `Document#pull` now accepts multiple attributes in the form of a hash, instead
+  of previously only being able to pull one value at a time. Aliases and
+  serialization is supported.
+
+        document.pull(names: "James", aliases: "007")
+
+* `Document#pull_all` now accepts multiple attributes in the form of a hash,
+  instead of previously only being able to pull one value at a time. Aliases and
+  serialization is supported.
+
+        document.pull_all(names: ["James", "Bond"], aliases: ["007"])
+
+* `Document#push_all` has been removed since it was deprecated in MongoDB 2.4.
+  Use `Document.push` instead.
+
+* `Document#push` now accepts multiple attributes in the form of a hash, and
+  can handle the pushing of single values or multiple values to the field via
+  $push with $each. Aliases and serialization is supported.
+
+        document.push(names: "James", aliases: [ "007", "Jim" ])
+
+* `Document#add_to_set` now accepts multiple attributes in the form of a hash,
+  and now aliases and serialization are supported.
+
+        document.add_to_set(names: "James", aliases: "007")
+
+* Criteria atomic operations API is now changed to match the changes in the
+  single document atomic API, for example:
+
+        Band.where(name: "Depeche Mode").inc(likes: 10, followers: 20)
+
+* \#3029 The `relation_field` field that is added for a single use case with polymorphic
+  relations has been removed. So where the following would work before:
+
+        class Eye
+          include Mongoid::Document
+          belongs_to :eyeable, polymorphic: true
+        end
+
+        class Face
+          include Mongoid::Document
+          has_one :left_eye, class_name: "Eye", as: :eyeable
+          has_one :right_eye, class_name: "Eye", as: :eyeable
+        end
+
+      This would now need to be modeled as (with the appropriate migration):
+
+        class Eye
+          include Mongoid::Document
+          belongs_to :left_socket, class_name: "Face", inverse_of: :left_eye
+          belongs_to :right_socket, class_name: "Face", inverse_of: :right_eye
+        end
+
+        class Face
+          include Mongoid::Document
+          has_one :left_eye, class_name: "Eye", inverse_of: :left_socket
+          has_one :right_eye, class_name: "Eye", inverse_of: :right_socket
+        end
+
+* \#2956 Caching on queries now only happens when `cache` is specifically
+  called. (Arthur Neves)
+
+* \#2898 Dirty attribute methods now properly handle field aliases.
+  (Niels Ganser)
+
+* \#2659 `Mongoid::Railtie` now properly uses only one initializer and
+  the name has changed to `mongoid.load-config`.
+
+* \#2656 `rake db:reseed` is now `rake db:reset` (Arthur Neves)
+
+* \#2648 `Boolean` becomes `Mongoid::Boolean` to avoid polluting the global
+  namespace with a commonly used class by other libraries.
+
+* \#2603 Return values from setters are now always the set value, regardless
+  of calling the setter or using send.
+
+* \#2433 `Mongoid::Paranoia` has been removed.
+
+* \#2432 `Mongoid::Versioning` has been removed.
+
+* \#2200 Mass assignment security now mirrors Rails 4's behavior.
+
+* `delete_all` and `destroy_all` no longer take a `:conditions` hash but
+  just the raw attributes.
+
+* \#1344 Atomic updates can now be executed in an `atomically` block, which will
+  delay any atomic updates on the document the block was called on until the
+  block is complete.
+
+    Update calls can be executed as normal in the block:
+
+        document.atomically do
+          document.inc(likes: 10)
+          document.bit(members: { and: 10 })
+          document.set(name: "Photek")
+        end
+
+    The document is also yielded to the block:
+
+        document.atomically do |doc|
+          doc.inc(likes: 10)
+          doc.bit(members: { and: 10 })
+          doc.set(name: "Photek")
+        end
+
+    The atomic commands are have a fluid interface:
+
+        document.atomically do |doc|
+          doc.inc(likes: 10).bit(members: { and: 10 }).set(name: "Photek")
+        end
+
+    If the fluid interface is leveraged without the `atomically` block, the
+    operations will persist in individual calls. For example, the following
+    would hit the database 3 times without the block provided:
+
+        doc.inc(likes: 10).bit(members: { and: 10 }).set(name: "Photek")
+
+    The block is only good for 1 document at a time, so embedded and root
+    document updates cannot be mixed at this time.
 
 ### New Features
+
+* \#2938 A configuration option `duplicate_fields_exception` has been added that
+  when set to `true` will raise an exception when defining a field that will
+  override an existing method. (Arthur Neves)
+
+* \#2855 Multiple extensions can now be supplied to relations. (Daniel Libanori)
+
+### Resolved Issues
+
+* \#2903 Removed unused string `to_a` extension.
+
+## 3.1.4
+
+### Resolved Issues
+
+* \#3021 Removed `mongoid.yml` warning from initializer, this is now handled by
+  the session configuration options.
+
+* \#3018 Uniqueness validator now properly serializes values in its check.
+  (Jerry Clinesmith)
+
+* \#3011 Fixed aliased field support for uniqueness validation. (Johnny Shields)
+
+* \#3008 Fixed subclasses not being able to inherit scopes properly when scope
+  is added post class load. (Mike Dillon)
+
+* \#2991 `Document.timeless` now properly scopes to the class and not thread.
+
+* \#2980 Dynamic fields now properly handle in place editing of hashes and
+  arrays. (Matthew Widmann)
+
+* \#2979 `pluck` no longer modifies the context in place. (Brian Goff)
+
+* \#2970 Fixed counter cache to properly use the name of the relation if available
+  then the inverse class name second if not.
+
+* \#2959 Nested attributes will now respect `autosave: false` if defined on the
+  relation.
+
+* \#2944 Fixed uniqueness validation for localized fields when case insensitive
+  is true. (Vladimir Zhukov)
+
+## 3.1.3
+
+### Resolved Issues
+
+* Dont duplicate embedded documents when saving after calling becomes method.
+  (Arthur Neves)
+
+* \#2961 Reloading a mongoid.yml configuration now properly clears previously
+  configured sessions.
+
+* \#2937 Counts can now take a `true` argument to factor in skip and limit.
+  (Arthur Neves)
+
+* \#2921 Don't use type in identity map selection if inheritance is not
+  in play. (Arthur Neves)
+
+* \#2893 Removed memoization of collection name and database name so lambdas
+  with `store_in` work properly when changing.
+
+* \#2911 The `_destroy` attribute on 1-n relations when processing nested
+  attributes can now be a string or symbol when passed an array.
+
+* \#2886 Fixed namespacing issue with Rails generators.
+
+* \#2885 Fixed touch for aliased fields. (Niels Ganser)
+
+* \#2883 Allow cyclic relations to not raise mixed relation errors.
+
+* \#2867 `pluck` now properly handles aliased fields.
+
+* \#2862 Autosaving no longer performs extra unnecessary queries.
+  (Arthur Neves)
+
+## 3.1.2
+
+### Resolved Issues
+
+* \#2851 Fixed BigDecimal demongoization of NaN values. (nkem)
+
+* \#2848 Fixed `touch` to work when usinng short timestamps. (Arthur Neves)
+
+* \#2840 Fixed end-to-end `no_timeout` option handling.
+
+* \#2826 Dynamic fields are now properly mongoized.
+
+* \#2822 Marshal load of relations now properly reapplies extensions.
+
+## 3.1.1
+
+### Resolved Issues
+
+* \#2839 Validations fixed to use the type cast value with the exception
+  of the numericality validator. (Lailson Bandeira)
+
+* \#2838 `store_in` options now properly merge instead of override.
+  (Colin MacKenzie)
+
+## 3.1.0
+
+### New Features
+
+* The minimum MongoDB requirement is now raised to 2.2, since we now
+  depend on the aggregation framework.
+
+* The minimum Active Model and Active Support dependencies have been
+  raised to 3.2.
+
+* \#2809 Relations can now specify a primary key to use instead of the
+  id on foreign keys.
+
+        class Person
+          include Mongoid::Document
+          field :username, type: String
+          has_many :cats, primary_key: "username"
+        end
+
+        class Cat
+          include Mongoid::Document
+          belongs_to :person, primary_key: "username"
+        end
+
+* \#2804 $geoNear support has now been added to criteria.
+
+        Bar.where(:likes.gt => 1000).geo_near([ 52, 13 ])
+        Bar.geo_near([ 52, 13 ]).max_distance(0.5).spherical
+
+* \#2799 Criteria#map can now accept a symbol of a field name as well as
+  a block to perform a more optimized `map`. (Gosha Arinich)
+
+        Band.where(:likes.gt => 1000).map(:name)
+
+* \#2798 Aggregations (`sum`, `min`, `max`, `avg`) now use the
+  aggregation framework instead of map/reduce. (Gosha Arinich)
+
+* \#2776 MongoDB 2.4.x new index types are now supported: "2dsphere",
+  "text", and "hashed". (Irakli Janiashvili)
+
+* \#2767 $maxScan support from Origin is now supported. (Jonathan Hyman)
+
+* \#2701 Cleanup up extra excessive database queries with 1-1 relations.
+
+* \#2693 Custom collection names can be passed to the model generator.
+  (Subhash Bhushan)
+
+        rails g model band --collection=artists
+
+* \#2688 `Model.create` and `Model.create!` now can take an array of
+  attributes hashes to create multiple documents at once. If an array
+  of attributes is provided then an array of documents is returned.
+
+        Band.create([{ name: "Tool" }, { name: "Placebo" }])
+        Band.create!([{ name: "Tool" }, { name: "Placebo" }])
+
+* \#2670 Unsetting fields now accepts multiple fields instead of only 1.
+  (Arthur Neves)
+
+        band.unset(:name, :founded)
+        Band.where(name: "Placebo").unset(:members, :origin)
+
+* \#2669 Passing a block to `Criteria#new` now properly sends the
+  block through to the model's contructor. (Arthur Neves)
+
+* \#2667 `exists?` no longer hits the database in cases where we have
+  the necessary information in memory.
+
+* \#2665 Mongoid now supports a counter cache for `belongs_to`
+  relations. (Arthur Neves)
+
+        class Band
+          include Mongoid::Document
+          belongs_to :label, counter_cache: "b_count"
+        end
+
+        class Album
+          include Mongoid::Document
+          belongs_to :band, counter_cache: true
+        end
+
+* \#2662 Embedded documents that have `belongs_to` relations may now
+  eager load them.
+
+* \#2657 Logger getter and setter convenience methods have been
+  added to the `Config` module. (Arthur Neves)
+
+* \#2615 Index options can now take a specific database name if the
+  indexes are only to exist in a database other than the default.
+
+        class Band
+          include Mongoid::Document
+          index name: 1, { database: "another_db" }
+        end
+
+* \#2613 Procs can now be provided as values to `store_in`:
+
+        class Band
+          include Mongoid::Document
+          store_in database: ->{ Thread.current[:database] }
+        end
+
+* \#2609 Pass through batch_size option to query. (Martin Mauch)
+
+* \#2555 Passing hashes to `find` when the documents id is of type hash
+  now properly works. (Szymon Kurcab)
+
+* \#2545 The `$` positional operator is used for update selectors on
+  embedded documents that are nested 1 level deep, when appropriate.
+
+* \#2539 `Mongoid.models` now tracks all models in the application for more
+  accurate determination of models for things such as indexing rake tasks.
+  (Ara Howard)
+
+* \#2525 Added the ability to have short timestamped fields with aliases. This
+  sets timestamp fields as `c_at` and `u_at` that are also aliased as
+  `created_at` and `updated_at` for convenience. (Rodrigo Saito)
+
+        class Band
+          include Mongoid::Document
+          include Mongoid::Timestamps::Short # For c_at and u_at.
+        end
+
+        class Band
+          include Mongoid::Document
+          include Mongoid::Timestamps::Created::Short # For c_at only.
+        end
+
+        class Band
+          include Mongoid::Document
+          include Mongoid::Timestamps::Updated::Short # For u_at only.
+        end
+
+* \#2465 Documents now have an `attribute_before_type_cast` for proper
+  handling of validations. (Gerad Suyderhoud)
+
+* \#2443 `expire_after_seconds` is now a valid index option
+  (http://docs.mongodb.org/manual/core/indexes/#ttl-indexes,
+   http://docs.mongodb.org/manual/tutorial/expire-data/).
+
+        class Event
+          include Mongoid::Document
+          field :created_at, type: DateTime
+          index({ created_at: 1 }, { expire_after_seconds: 3600 })
+        end
+
+* \#2373 Relations with the `touch: true` option will now be automatically
+  touched when the child document is created or destroyed.
 
 * Added `Document.first_or_create!` and `Criteria#first_or_create!`. This
   raises a validations error if creation fails validation.
@@ -106,12 +506,407 @@ For instructions on upgrading to newer versions, visit
 
 ### Resolved Issues
 
-## 3.0.6 (branch 3.0.0-stable)
+* \#2730 Calling sort on a context properly updates the context's criteria.
+  (Arthur Neves)
+
+* \#2719 `distinct` is now available at the class level.
+
+        Band.distinct(:name)
+
+* \#2714 Overriding sessions when the new session has a different database will
+  now properly switch the database at runtime as well.
+
+* \#2697 Eager loading fixed when including multiple models that inherit from
+  the same class. (Kirill Lazarev)
+
+* \#2664 In memory sorting of embedded documents now properly works when
+  multiple fields are provided. (Neer Friedman)
+
+## 3.0.24
 
 ### Resolved Issues
 
+* \#2879 `remove_attribute` on new documents no longer creates an unnecessary
+  $unset operation.
+
+## 3.0.23
+
+### Resolved Issues
+
+* \#2851 Fixed BigDecimal demongoization of NaN values. (nkem)
+
+* \#2841 Calling `delete_all` or `destroy_all` on an embeds many when in the
+  middle of a parent update will now properly execute the deletion.
+  (Arthur Neves)
+
+* \#2835 Fixed clearing of persistence options in uniqueness validator.
+
+* \#2826 Dynamic fields are now properly mongoized.
+
+* \#2822 Marshal load of relations now properly reapplies extensions.
+
+* \#2821 Autosaved relations should be duped in inheriting classes.
+
+## 3.0.22
+
+### Resolved Issues
+
+* \#2812 Fixed criteria on many to many relations when the base document is
+  destroyed and the foreign key has not yet been lazy evaluated.
+
+* \#2796 Don't cascade changes on has_many relations when assigning with
+  a delete.
+
+* \#2795 Fix precision on time conversions. (Tom de Bruijn)
+
+* \#2794 Don't autobuild when reading a relation for validation.
+
+* \#2790 `becomes` now copies embedded documents even if they were protected
+  by mass assignment.
+
+* \#2787 Allow `becomes` to replace the document in the identity map.
+
+* \#2786 Fixed regressed cascading callbacks on destroy not firing.
+
+* \#2784 Fixed uniqueness validation properly getting added to subclasses.
+  (Takeshi Akima)
+
+## 3.0.21
+
+### Resolved Issues
+
+* \#2781 / * \#2777 - Fixed issue with serialization of `DateTime` that was
+  only present in Rails environments.
+
+## 3.0.20
+
+### Resolved Issues
+
+* \#2774 Ensure validations macros for uniqueness, presence, and associated
+  are also available at the instance level.
+
+* \#2772 Localized fields are now properly handled when cloning a document.
+
+* \#2758 `Mongoid.create_indexes` does not fail when cannot constantize class.
+  (Arthur Neves)
+
+* \#2743 Persistence options are no longer cleared when loading revisions.
+  (Arthur Neves)
+
+* \#2741 Fix time mongoization usec rounding errors on MRI and JRuby.
+
+* \#2740 Support integer keys in hash fields when using `read_attribute` with
+  dot notation.
+
+* \#2739 Ensure integer deserialization properly casts to integers.
+
+* \#2733 Many to many relations with `inverse_of: nil` do not persist the
+  inverse relation on `<<` or `push` if the document is already persisted.
+
+* \#2705 Fixed logic around when children can be added to the cascading
+  callbacks list.
+
+## 3.0.19
+
+### Resolved Issues
+
+* Released to revert the changes in \#2703.
+
+## 3.0.18
+
+### Resolved Issues
+
+* \#2707 Calling `find_or_create_by` or `find_by_initialize_by` off a relation
+  with a chained criteria or scope now properly keeps the relations intact on
+  the new or found document.
+
+* \#2699 Resetting a field now removes the name from the changed attributes
+  list. (Subhash Bhushan)
+
+* \#2683 Aliased fields are now supported when executing atomic operations from
+  criteria. (Arthur Neves)
+
+* \#2678 Calling `Criteria#sum` with no matching documents returns `0` instead
+  of `nil`.
+
+* \#2671 Matchers now correctly handle symbol keys. (Jonathan Hyman)
+
+## 3.0.17
+
+### Resolved Issues
+
+* \#2686 Fixed the broken Moped dependency - Moped now must be at least at
+  version 1.2.0.
+
+## 3.0.16
+
+### Resolved Issues
+
+* \#2661 Implement instance level `model_name` for documents.
+
+* \#2651 Ensure `Criteria#type` works properly with both symbol and string
+  keys in the selector.
+
+* \#2647 Ensure `deleted?` and `destroyed?` on paranoid documents return the
+  same value.
+
+* \#2646 Set unloaded doc in memory on enumerable targets before yielding to
+  the block.
+
+* \#2645 Take caching into consideration when asking for counts.
+  (Arthur Nogueira Neves)
+
+* \#2642 Don't batch push empty arrays on embedded documents. (Laszlo Bacsi)
+
+* \#2639 Avoid extra unnecesary queries on new records when building relations
+  off of them.
+
+* \#2638 When a criteria is eager loading, calling `first` or `last` then
+  iterating the entire results properly eager loads the full request.
+
+* \#2618 Validating uniqueness now always uses string consistency by default.
+
+* \#2564 Fixed infinite recursion for cases where a relation getter was
+  overridden and called the setter from that method.
+
+* \#2554 Ensure `unscoped` on an `embeds_many` does not include documents
+  flagged for destruction.
+
+## 3.0.15
+
+### Resolved Issues
+
+* \#2630 Fix cascading when the metadata exists but no cascade defined.
+
+* \#2625 Fix `Marshal.dump` and `Marshal.load` of proxies and criteria
+  objects.
+
+* \#2619 Fixed the classes returned by `observed_classes` on an observer
+  when it is observing custom models.
+
+* \#2612 `DocumentNotFound` errors now expose the class in the error
+  instance.
+
+* \#2610 Ensure calling `first` after a `last` that had sorting options resets
+  the sort.
+
+* \#2604 Check pulls and pushes for conflicting updates. (Lucas Souza)
+
+* \#2600 Instantiate the proper class type for attributes when using
+  multi parameter attributes. (xxswingxx)
+
+* \#2598 Fixed sorting on localized fields with embedded docs.
+
+* \#2588 Block defining methods for dynamic attributes that would be invalid
+  ruby methods. (Matt Sanford)
+
+* \#2587 Fix method clash with `belongs_to` proxies when resetting relation
+  unloaded criteria.
+
+* \#2585 Ensure session configuration options get passed to Moped as symbols.
+
+* \#2584 Allow map/reduce to operate on secondaries if output is set to `inline`.
+
+* \#2582 Ensure `nil` session override can never cause to access a session with
+  name `nil`.
+
+* \#2581 Use strong consistency when reloading documents. (Mark Kremer)
+
+## 3.0.14
+
+### Resolved Issues
+
+* \#2575 Prevent end of month times from rounding up since floats are not
+  precise enough to handle usec. (Steve Valaitis)
+
+* \#2573 Don't use i18n for inspection messages.
+
+* \#2571 Remove blank error message from locales. (Jordan Elver)
+
+* \#2568 Fix uniqueness validation for lacalized fields when a scope is also
+  provided.
+
+* \#2552 Ensure `InvalidPath` errors are raised when embedded documents try to
+  get paths from a root selector.
+
+## 3.0.13
+
+### Resolved Issues
+
+* \#2548 Fix error when generating config file with a fresh app with Unicorn in
+  the gemset.
+
+## 3.0.12
+
+### Resolved Issues
+
+* \#2542 Allow embedded documents using `store_as` to properly alias in
+  criteria.
+
+* \#2541 Ensure that the type change is correct when upcasting/downcasting a
+  document via `Document#becomes` (Łukasz Bandzarewicz)
+
+* \#2529 Fields on subclasses that override fields in the parent where both have
+  defaults with procs now properly override the default in the subclass.
+
+* \#2528 Aliased fields need to be duped when subclassing.
+
+* \#2527 Ensure removal of docs in a `has_many` does a multi update when setting
+  to an empty array.
+
+## 3.0.11
+
+### Resolved Issues
+
+* \#2522 Fixed `Criteria#with` to return the criteria and not the class.
+
+* \#2518 Fix unit of work call for the identity map when using Passenger.
+
+* \#2512 Ensure nested attributes destroy works with the delayed destroys
+  introduced in 3.0.10 when multiple levels deep.
+
+* \#2509 Don't hit identity map an extra time when the returned value is an
+  empty hash. (Douwe Maan)
+
+## 3.0.10
+
+### Resolved Issues
+
+* \#2507 Ensure no extra db hits when eager loading has a mix of parents
+  with and without docs. (Douwe Maan)
+
+* \#2505 Ensure `update` and `update_all` from criteria properly handle
+  aliased fields. (Dmitry Krasnoukhov)
+
+* \#2504 `Model#becomes` properly keeps the same id.
+
+* \#2498 Criteria now properly pass provided blocks though `method_missing`.
+
+* \#2496 Embedded documents that were previously stored without ids now
+  properly update and get assigned ids from within Mongoid.
+
+* \#2494 All explicit atomic operations now properly respect aliased fields.
+
+* \#2493 Use `Class#name` instead of `Class#model_name` when setting
+  polymorphic types in case `model_name` has been overridden.
+
+* \#2491 Removed unnecessary merge call in cascadable children.
+
+* \#2485 Removing indexes now always uses strong consistency.
+
+* \#2483 Versioning now handles localized fields. (Lawrence Curtis)
+
+* \#2482 Store find parameters in the `DocumentNotFound` error.
+
+* \#2481 Map/reduce aggregations now properly handle Mongo's batching of
+  reduce jobs in groups of 100 with the state being passed through on the
+  count.
+
+* \#2476 Handle skip and limit outside of range on embeds_many relations
+  gracefully.
+
+* \#2474 Correctly detach 1-1 relations when the child is not yet loaded.
+  (Kostyantyn Stepanyuk)
+
+* \#2451 `relation.deleted` on embedded paranoid documents now works properly
+  again.
+
+* \#2472 Ensure `update_all` on embedded relations works properly when nothing
+  is actually going to be updated.
+
+* \#2469 Nullified documents on relations are now able to be re-added with the
+  same in memory instance.
+
+* \#2454 `Model#as_document` properly allows changes from having a relation to
+  the relation being removed. (James Almond)
+
+* \#2445 Mongoid middleware now properly supports both normal and streamed
+  responses and properly clears the identity map for either.
+
+* \#2367 Embedded documents that are to be deleted via nested attributes no
+  longer become immediately removed from the relation in case the parent
+  validation fails. Instead, they get flagged for destruction and then the
+  removal occurs upon the parent passing validation and going to persist.
+
+  Note this is a behaviour change, but since the API does not change and
+  the previous behaviour was incorrect and did not match AR this was able
+  to go into a point release.
+
+## 3.0.9
+
+### Resolved Issues
+
+* \#2463 Fixed the broken `rails g mongoid:config` from a fresh repo.
+
+* \#2456 The descendants cache is now reset when the document is inherited
+  again. (Kostyantyn Stepanyuk)
+
+* \#2453 `Model#write_attribute` now properly works with aliased fields.
+  (Campbell Allen)
+
+* \#2444 Removed extra dirty methods creation call. (Kostyantyn Stepanyuk)
+
+* \#2440/\#2435 Pass mass assignment options down to children when setting via
+  nested attributes or embedded documents.
+
+* \#2439 Fixed memory leak in threaded selection of returned fields.
+  (Tim Olsen)
+
+* mongoid/moped\#82 Aliased fields now work with `Criteria#distinct`.
+
+* \#2423 Fixed embedded document's `update_all` to perform the correct $set
+  when using off a criteria.
+
+* \#2414 Index definitions now respect aliased fields.
+
+* \#2413 Enumerable targets now properly return enumerators when no blocks
+  are provided. (Andrew Smith)
+
+* \#2411 BigDecimal fields are properly stored as strings when mongoizing
+  integers and floats.
+
+* \#2409 Don't warn about missing mongoid.yml if configured programatically.
+
+* \#2403 Return false on `update_all` of an embeds many with no documents.
+
+* \#2401 Bring back the ability to merge a criteria with a hash.
+
+* \#2399 Reject blank id values on has_many `Model#object_ids=`.
+  (Tiago Rafael Godinho)
+
+* \#2393 Ensure `inverse_of` is respected when using polymorphic relations.
+
+* \#2388 Map/reduce properly uses `sort` instead of `orderby` in the execution
+  of the command. (Alex Tsibulya)
+
+* \#2386 Allow geo haystack and bits parameters in indexes. (Bradley Rees)
+
+* \#2380 `Model#becomes` now properly copies over dirty attributes.
+
+* \#2331 Don't double push child documents when extra saves are called in an
+  after_create callback.
+
+## 3.0.8 (Yanked)
+
+## 3.0.6
+
+### Resolved Issues
+
+* \#2375 Uniqueness validation scoping now works with aliased fields.
+
+* \#2372 Ensure that all atomic operations mongoize values before executing.
+
+* \#2370 Paranoid documents now properly don't get deleted when using
+  `dependent: :restrict` and an exception is raised.
+
 * \#2365 Don't do anything when trying to replace an embeds_one with the same
   document.
+
+* \#2362 Don't store inverse of field values in the database when they are not
+  needed. (When there is not more than one polymorphic parent defined on the
+  same class).
+
+* \#2360 Cloning documents should ignore mass assignment protection rules.
 
 * \#2356 When limiting fields returned in queries via `only` ensure that the
   limitation is scoped to the model.
@@ -504,7 +1299,7 @@ For instructions on upgrading to newer versions, visit
           Enumerable, or included gems that inject methods into these
           or Mongoid internals.
 
-* \#1753/#1649 A setter and getter for has_many relations to set it's
+* \#1753/#1649 A setter and getter for has_many relations to set its
   children is now provided. (Piotr Jakubowski)
 
         class Album
@@ -730,7 +1525,7 @@ For instructions on upgrading to newer versions, visit
         band.with(database: "secondary).save!
         Band.with(collection: "artists").where(name: "Depeche Mode")
 
-* \#1291 You can now configure on a per-model basis where it's documents are
+* \#1291 You can now configure on a per-model basis where its documents are
   stored with the new and improved `store_in` macro.
 
         class Band
@@ -847,7 +1642,7 @@ For instructions on upgrading to newer versions, visit
           index({ name: 1 }, { unique: true, background: true })
         end
 
-      Geospacial indexing needs "2d" as it's direction.
+      Geospacial indexing needs "2d" as its direction.
 
         class Venue
           include Mongoid::Document
@@ -1014,11 +1809,11 @@ For instructions on upgrading to newer versions, visit
     If the id is set, but the document for it has not been persisted, accessing
     the relation will return empty results.
 
-    If the id is set and it's document is persisted, accessing the relation
+    If the id is set and its document is persisted, accessing the relation
     will return the document.
 
     If the id is set, but the base document is not saved afterwards, then
-    reloading will return the document to it's original state.
+    reloading will return the document to its original state.
 
 * \#1093 Field serialization strategies have changed on Array, Hash, Integer
   and Boolean to be more consistent and match AR where appropriate.
@@ -1175,6 +1970,29 @@ For instructions on upgrading to newer versions, visit
 
 * \#685 Attempting to use versioning with embedded documents will now
   raise a proper error alerting the developer this is not allowed.
+
+## 2.6.0
+
+### New Features
+
+* \#2709 Backported the `touch` functionality from Mongoid 3.
+
+## 2.5.2
+
+### Resolved Issues
+
+* \#2502 Fixed cache key to properly handle when the document does not
+  include `Mongoid::Timestamps::Updated`. (Arthur Nogueira Neves)
+
+## 2.5.1
+
+### Resolved Issues
+
+* \#2492 Backport cascading callbacks performance and memory fixes from
+  3.0.0-stable.
+
+* \#2464 Backport the nested attributes fix for keeping many relations in
+  memory when updating attributes. (Chris Thompson)
 
 ## 2.5.0
 
